@@ -1,0 +1,28 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "ridge_regression",
+
+  "variables": {
+    "x": { "shape": [20] }
+  },
+
+  "parameters": {
+    "A": { "shape": [100, 20], "data": "A.npy" },
+    "b": { "shape": [100], "data": "b.npy" },
+    "lambda": { "value": 1.0 }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "sum_squares(A @ x - b) + lambda * sum_squares(x)"
+  },
+
+  "constraints": [],
+
+  "metadata": {
+    "description": "L2-regularized least squares (Ridge regression / Tikhonov regularization)",
+    "problem_class": "QP",
+    "tags": ["regression", "regularization"]
+  }
+}

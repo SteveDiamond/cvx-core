@@ -1,0 +1,28 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "lasso_regression",
+
+  "variables": {
+    "beta": { "shape": [100] }
+  },
+
+  "parameters": {
+    "X": { "shape": [50, 100], "data": "X.npy" },
+    "y": { "shape": [50], "data": "y.npy" },
+    "lambda": { "value": 0.1 }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "sum_squares(X @ beta - y) + lambda * norm1(beta)"
+  },
+
+  "constraints": [],
+
+  "metadata": {
+    "description": "L1-regularized least squares (LASSO) regression for sparse feature selection",
+    "problem_class": "SOCP",
+    "tags": ["regression", "lasso", "sparse", "machine-learning"]
+  }
+}

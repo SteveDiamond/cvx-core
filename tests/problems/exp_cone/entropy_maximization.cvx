@@ -1,0 +1,30 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "maximum_entropy",
+
+  "variables": {
+    "p": { "shape": [5], "nonneg": true }
+  },
+
+  "parameters": {
+    "A": { "value": [[1, 2, 3, 4, 5], [5, 4, 3, 2, 1]] },
+    "b": { "value": [3, 3] }
+  },
+
+  "objective": {
+    "sense": "maximize",
+    "expression": "sum(entropy(p))"
+  },
+
+  "constraints": [
+    "sum(p) == 1",
+    "A @ p == b"
+  ],
+
+  "metadata": {
+    "description": "Maximum entropy distribution subject to moment constraints",
+    "problem_class": "EXP_CONE",
+    "notes": "entropy(p) = -p * log(p)"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "log_sum_exp_minimization",
+
+  "variables": {
+    "x": { "shape": [5] }
+  },
+
+  "parameters": {
+    "A": { "value": [[1, 0, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 1, 0, 0]] },
+    "b": { "value": [1, 2, 3] }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "log(sum(exp(x)))"
+  },
+
+  "constraints": [
+    "A @ x == b"
+  ],
+
+  "metadata": {
+    "description": "Minimize log-sum-exp (soft maximum)",
+    "problem_class": "EXP_CONE",
+    "notes": "log(sum(exp(x))) is a smooth approximation to max(x)"
+  }
+}

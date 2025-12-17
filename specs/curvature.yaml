@@ -1,0 +1,375 @@
+# CVX-Core Curvature Composition Rules
+# These rules define how curvatures combine under various operations.
+
+version: "1.0"
+
+# =============================================================================
+# CURVATURE HIERARCHY
+# =============================================================================
+# From most restrictive to least:
+# constant < affine < convex|concave < unknown
+
+hierarchy:
+  - constant    # Most restrictive
+  - affine
+  - convex
+  - concave
+  - unknown     # Least restrictive (not DCP)
+
+relationships:
+  constant:
+    is_convex: true
+    is_concave: true
+    is_affine: true
+
+  affine:
+    is_convex: true
+    is_concave: true
+    is_affine: true
+
+  convex:
+    is_convex: true
+    is_concave: false
+    is_affine: false
+
+  concave:
+    is_convex: false
+    is_concave: true
+    is_affine: false
+
+  unknown:
+    is_convex: false
+    is_concave: false
+    is_affine: false
+
+# =============================================================================
+# ADDITION RULES
+# =============================================================================
+# add_curvature(a, b) = ?
+
+addition:
+  # Constant is identity for addition
+  constant:
+    constant: constant
+    affine: affine
+    convex: convex
+    concave: concave
+    unknown: unknown
+
+  # Affine absorbs into stronger curvatures
+  affine:
+    constant: affine
+    affine: affine
+    convex: convex
+    concave: concave
+    unknown: unknown
+
+  # Convex + Convex = Convex, Convex + Concave = Unknown
+  convex:
+    constant: convex
+    affine: convex
+    convex: convex
+    concave: unknown   # KEY: convex + concave = unknown
+    unknown: unknown
+
+  # Concave + Concave = Concave
+  concave:
+    constant: concave
+    affine: concave
+    convex: unknown    # KEY: concave + convex = unknown
+    concave: concave
+    unknown: unknown
+
+  # Unknown propagates
+  unknown:
+    constant: unknown
+    affine: unknown
+    convex: unknown
+    concave: unknown
+    unknown: unknown
+
+# =============================================================================
+# NEGATION RULES
+# =============================================================================
+# negate_curvature(c) = ?
+
+negation:
+  constant: constant   # -constant is constant
+  affine: affine       # -affine is affine
+  convex: concave      # -convex is concave
+  concave: convex      # -concave is convex
+  unknown: unknown     # -unknown is unknown
+
+# =============================================================================
+# SCALAR MULTIPLICATION RULES
+# =============================================================================
+# scalar_mul_curvature(scalar_sign, c) = ?
+
+scalar_multiplication:
+  positive:  # scalar > 0
+    constant: constant
+    affine: affine
+    convex: convex
+    concave: concave
+    unknown: unknown
+
+  zero:  # scalar == 0
+    constant: constant
+    affine: constant
+    convex: constant
+    concave: constant
+    unknown: constant
+
+  negative:  # scalar < 0
+    constant: constant
+    affine: affine
+    convex: concave    # Negative flips convex to concave
+    concave: convex    # Negative flips concave to convex
+    unknown: unknown
+
+# =============================================================================
+# COMPOSITION RULES (DCP)
+# =============================================================================
+# compose(outer_curv, outer_monotonicity, inner_curv) = ?
+#
+# The composition f(g(x)) is:
+# - convex if f is convex and (f increasing and g convex) or (f decreasing and g concave)
+# - concave if f is concave and (f increasing and g concave) or (f decreasing and g convex)
+# - affine if both f and g are affine
+# - unknown otherwise
+
+composition:
+  # Outer function is constant -> result is constant
+  constant:
+    increasing:
+      constant: constant
+      affine: constant
+      convex: constant
+      concave: constant
+      unknown: constant
+    decreasing:
+      constant: constant
+      affine: constant
+      convex: constant
+      concave: constant
+      unknown: constant
+    none:
+      constant: constant
+      affine: constant
+      convex: constant
+      concave: constant
+      unknown: constant
+
+  # Outer function is affine
+  affine:
+    increasing:
+      constant: constant
+      affine: affine
+      convex: convex
+      concave: concave
+      unknown: unknown
+    decreasing:
+      constant: constant
+      affine: affine
+      convex: concave
+      concave: convex
+      unknown: unknown
+    none:  # Affine with no monotonicity = must be constant
+      constant: constant
+      affine: affine  # Actually identity
+      convex: unknown
+      concave: unknown
+      unknown: unknown
+
+  # Outer function is convex
+  convex:
+    increasing:
+      # f convex increasing, g * -> f(g) *
+      constant: constant
+      affine: convex
+      convex: convex       # KEY: increasing convex of convex = convex
+      concave: unknown
+      unknown: unknown
+    decreasing:
+      # f convex decreasing, g * -> opposite inner
+      constant: constant
+      affine: convex
+      convex: unknown
+      concave: convex      # KEY: decreasing convex of concave = convex
+      unknown: unknown
+    none:
+      # f convex with no monotonicity (like norms)
+      constant: constant
+      affine: convex       # Convex of affine is convex
+      convex: unknown      # Need affine argument
+      concave: unknown
+      unknown: unknown
+
+  # Outer function is concave
+  concave:
+    increasing:
+      # f concave increasing, g * -> f(g) *
+      constant: constant
+      affine: concave
+      convex: unknown
+      concave: concave     # KEY: increasing concave of concave = concave
+      unknown: unknown
+    decreasing:
+      # f concave decreasing, g * -> opposite inner
+      constant: constant
+      affine: concave
+      convex: concave      # KEY: decreasing concave of convex = concave
+      concave: unknown
+      unknown: unknown
+    none:
+      # f concave with no monotonicity
+      constant: constant
+      affine: concave
+      convex: unknown
+      concave: unknown
+      unknown: unknown
+
+  # Outer function is unknown
+  unknown:
+    increasing:
+      constant: unknown
+      affine: unknown
+      convex: unknown
+      concave: unknown
+      unknown: unknown
+    decreasing:
+      constant: unknown
+      affine: unknown
+      convex: unknown
+      concave: unknown
+      unknown: unknown
+    none:
+      constant: unknown
+      affine: unknown
+      convex: unknown
+      concave: unknown
+      unknown: unknown
+
+# =============================================================================
+# SIGN COMPOSITION RULES
+# =============================================================================
+
+sign_addition:
+  nonnegative:
+    nonnegative: nonnegative
+    nonpositive: unknown
+    zero: nonnegative
+    unknown: unknown
+
+  nonpositive:
+    nonnegative: unknown
+    nonpositive: nonpositive
+    zero: nonpositive
+    unknown: unknown
+
+  zero:
+    nonnegative: nonnegative
+    nonpositive: nonpositive
+    zero: zero
+    unknown: unknown
+
+  unknown:
+    nonnegative: unknown
+    nonpositive: unknown
+    zero: unknown
+    unknown: unknown
+
+sign_multiplication:
+  nonnegative:
+    nonnegative: nonnegative
+    nonpositive: nonpositive
+    zero: zero
+    unknown: unknown
+
+  nonpositive:
+    nonnegative: nonpositive
+    nonpositive: nonnegative
+    zero: zero
+    unknown: unknown
+
+  zero:
+    nonnegative: zero
+    nonpositive: zero
+    zero: zero
+    unknown: zero
+
+  unknown:
+    nonnegative: unknown
+    nonpositive: unknown
+    zero: zero
+    unknown: unknown
+
+sign_negation:
+  nonnegative: nonpositive
+  nonpositive: nonnegative
+  zero: zero
+  unknown: unknown
+
+# =============================================================================
+# DCP CONSTRAINT RULES
+# =============================================================================
+
+constraint_rules:
+  equality:
+    # f(x) == g(x) requires both sides affine
+    lhs: affine
+    rhs: affine
+    description: "Equality constraints require affine expressions on both sides"
+
+  less_equal:
+    # f(x) <= g(x) requires LHS convex and RHS concave
+    lhs: convex
+    rhs: concave
+    description: "LHS must be convex, RHS must be concave"
+
+  greater_equal:
+    # f(x) >= g(x) requires LHS concave and RHS convex
+    lhs: concave
+    rhs: convex
+    description: "LHS must be concave, RHS must be convex"
+
+objective_rules:
+  minimize:
+    objective: convex
+    description: "Minimization objective must be convex"
+
+  maximize:
+    objective: concave
+    description: "Maximization objective must be concave"
+
+# =============================================================================
+# CODE GENERATION HELPERS
+# =============================================================================
+
+code_templates:
+  add_curvature: |
+    fn add_curvature(a: Curvature, b: Curvature) -> Curvature {
+      match (a, b) {
+        (Constant, x) | (x, Constant) => x,
+        (Affine, x) | (x, Affine) => x,
+        (Convex, Convex) => Convex,
+        (Concave, Concave) => Concave,
+        _ => Unknown,
+      }
+    }
+
+  negate_curvature: |
+    fn negate_curvature(c: Curvature) -> Curvature {
+      match c {
+        Convex => Concave,
+        Concave => Convex,
+        other => other,
+      }
+    }
+
+  scalar_mul_curvature: |
+    fn scalar_mul_curvature(scalar: f64, c: Curvature) -> Curvature {
+      if scalar == 0.0 { Constant }
+      else if scalar > 0.0 { c }
+      else { negate_curvature(c) }
+    }

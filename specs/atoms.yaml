@@ -1,0 +1,577 @@
+# CVX-Core Atom Specification
+# This file defines all atoms (operations) in the CVX* expression system
+# with their DCP properties, shapes, and canonicalization rules.
+
+version: "1.0"
+
+# =============================================================================
+# LEAF NODES
+# =============================================================================
+
+leaf_nodes:
+  variable:
+    description: "Decision variable in the optimization problem"
+    curvature: affine
+    sign: from_attributes  # nonneg, nonpos, or unknown
+    shape: user_defined
+    attributes:
+      - nonneg: boolean     # x >= 0
+      - nonpos: boolean     # x <= 0
+      - integer: boolean    # x in Z
+      - binary: boolean     # x in {0, 1}
+      - psd: boolean        # X >> 0 (matrix)
+      - nsd: boolean        # X << 0 (matrix)
+      - symmetric: boolean  # X = X^T
+
+  constant:
+    description: "Fixed numeric value"
+    curvature: constant
+    sign: from_value  # computed from actual values
+    shape: from_value
+
+  parameter:
+    description: "Parameterized value for DPP (Disciplined Parametrized Programming)"
+    curvature: constant
+    sign: from_attributes
+    shape: user_defined
+    notes: "Used for repeated solves with different data"
+
+# =============================================================================
+# AFFINE ATOMS
+# =============================================================================
+
+affine_atoms:
+  add:
+    description: "Addition: a + b"
+    arity: binary
+    curvature:
+      rule: combine
+      formula: "add_curvature(left, right)"
+    sign:
+      rule: combine
+      formula: "add_sign(left, right)"
+    shape: broadcast(left, right)
+    canonicalization: direct  # No auxiliary variables needed
+
+  neg:
+    description: "Negation: -a"
+    arity: unary
+    curvature:
+      rule: negate
+      formula: "negate_curvature(arg)"
+    sign:
+      rule: negate
+      formula: "negate_sign(arg)"
+    shape: same_as_arg
+    canonicalization: direct
+
+  mul:
+    description: "Element-wise multiplication: a * b"
+    arity: binary
+    curvature:
+      rule: scalar_mul
+      requires: "at least one operand must be constant"
+      formula: "scalar_mul_curvature(constant_value, other_curvature)"
+    sign:
+      rule: multiply
+      formula: "mul_sign(left, right)"
+    shape: broadcast(left, right)
+    canonicalization: direct
+
+  div:
+    description: "Element-wise division: a / b"
+    arity: binary
+    curvature:
+      rule: scalar_div
+      requires: "divisor must be positive constant"
+      formula: "scalar_mul_curvature(1/constant_value, dividend_curvature)"
+    sign:
+      rule: divide
+      formula: "div_sign(left, right)"
+    shape: same_as_left
+    canonicalization: direct
+
+  matmul:
+    description: "Matrix multiplication: A @ B"
+    arity: binary
+    curvature:
+      rule: matmul
+      requires: "at least one operand must be constant"
+      formula: |
+        if left is constant: return right_curvature
+        if right is constant: return left_curvature
+        else: return unknown
+    sign: unknown  # Generally cannot determine
+    shape: matmul_shape(left, right)
+    canonicalization: direct
+
+  sum:
+    description: "Sum of elements, optionally along axis"
+    arity: unary
+    parameters:
+      - axis: "optional integer, dimension to sum over"
+    curvature: preserve
+    sign: preserve
+    shape: |
+      if axis is None: scalar
+      else: remove dimension at axis
+    canonicalization: direct
+
+  reshape:
+    description: "Reshape to new dimensions"
+    arity: unary
+    parameters:
+      - shape: "target shape (total size must match)"
+    curvature: preserve
+    sign: preserve
+    shape: parameter_shape
+    canonicalization: direct
+
+  index:
+    description: "Indexing/slicing: x[i:j]"
+    arity: unary
+    parameters:
+      - ranges: "list of (start, stop) or single indices per dimension"
+    curvature: preserve
+    sign: preserve
+    shape: computed_from_ranges
+    canonicalization: direct
+
+  vstack:
+    description: "Vertical stack: [a; b; ...]"
+    arity: variadic
+    curvature:
+      rule: combine_all
+      formula: "reduce(add_curvature, args)"
+    sign:
+      rule: combine_all
+      formula: "reduce(add_sign, args)"
+    shape: "[sum(rows), cols]"
+    canonicalization: direct
+
+  hstack:
+    description: "Horizontal stack: [a, b, ...]"
+    arity: variadic
+    curvature:
+      rule: combine_all
+      formula: "reduce(add_curvature, args)"
+    sign:
+      rule: combine_all
+      formula: "reduce(add_sign, args)"
+    shape: "[rows, sum(cols)]"
+    canonicalization: direct
+
+  transpose:
+    description: "Matrix transpose: A^T"
+    arity: unary
+    curvature: preserve
+    sign: preserve
+    shape: "[cols, rows]"
+    canonicalization: direct
+
+  trace:
+    description: "Matrix trace: tr(A)"
+    arity: unary
+    requires: square_matrix
+    curvature: preserve
+    sign: unknown  # Can't determine without values
+    shape: scalar
+    canonicalization: direct
+
+  diag:
+    description: "Diagonal: vector->diagonal matrix or matrix->diagonal vector"
+    arity: unary
+    curvature: preserve
+    sign: preserve
+    shape: |
+      if input is vector(n): matrix(n, n)
+      if input is matrix(m, n): vector(min(m, n))
+    canonicalization: direct
+
+  cumsum:
+    description: "Cumulative sum along axis"
+    arity: unary
+    parameters:
+      - axis: "optional integer"
+    curvature: preserve
+    sign: preserve
+    shape: same_as_arg
+    canonicalization: direct
+
+# =============================================================================
+# CONVEX ATOMS
+# =============================================================================
+
+convex_atoms:
+  norm1:
+    description: "L1 norm: ||x||_1 = sum(|x_i|)"
+    arity: unary
+    curvature: convex
+    sign: nonnegative
+    shape: scalar
+    dcp_requires: affine_arg
+    monotonicity: none  # Not monotonic
+    canonicalization:
+      type: linear_cone
+      aux_vars:
+        - t: "vector, same size as arg"
+      constraints:
+        - "t >= arg"
+        - "t >= -arg"
+      returns: "sum(t)"
+
+  norm2:
+    description: "L2 norm: ||x||_2 = sqrt(sum(x_i^2))"
+    arity: unary
+    curvature: convex
+    sign: nonnegative
+    shape: scalar
+    dcp_requires: affine_arg
+    monotonicity: none
+    canonicalization:
+      type: soc
+      aux_vars:
+        - t: "scalar, nonnegative"
+      constraints:
+        - kind: soc
+          t: t
+          x: arg
+      returns: t
+
+  normInf:
+    description: "Infinity norm: ||x||_inf = max(|x_i|)"
+    arity: unary
+    curvature: convex
+    sign: nonnegative
+    shape: scalar
+    dcp_requires: affine_arg
+    monotonicity: none
+    canonicalization:
+      type: linear_cone
+      aux_vars:
+        - t: "scalar"
+      constraints:
+        - "t * ones >= arg"
+        - "t * ones >= -arg"
+      returns: t
+
+  abs:
+    description: "Absolute value (element-wise): |x|"
+    arity: unary
+    curvature: convex
+    sign: nonnegative
+    shape: same_as_arg
+    dcp_requires: affine_arg
+    monotonicity: none
+    canonicalization:
+      type: linear_cone
+      aux_vars:
+        - t: "same shape as arg"
+      constraints:
+        - "t >= arg"
+        - "t >= -arg"
+      returns: t
+
+  pos:
+    description: "Positive part: max(x, 0)"
+    arity: unary
+    curvature: convex
+    sign: nonnegative
+    shape: same_as_arg
+    dcp_requires: convex_arg  # Composition: increasing convex of convex
+    monotonicity: increasing
+    canonicalization:
+      type: linear_cone
+      aux_vars:
+        - t: "same shape as arg, nonnegative"
+      constraints:
+        - "t >= arg"
+        - "t >= 0"
+      returns: t
+
+  negPart:
+    description: "Negative part: max(-x, 0)"
+    arity: unary
+    curvature: convex
+    sign: nonnegative
+    shape: same_as_arg
+    dcp_requires: concave_arg  # Composition: increasing convex of (negate of) concave
+    monotonicity: decreasing
+    canonicalization:
+      type: linear_cone
+      aux_vars:
+        - t: "same shape as arg, nonnegative"
+      constraints:
+        - "t >= -arg"
+        - "t >= 0"
+      returns: t
+
+  maximum:
+    description: "Element-wise maximum of expressions"
+    arity: variadic
+    curvature: convex
+    sign: from_args  # nonneg if all args nonneg
+    shape: broadcast(args)
+    dcp_requires: all_convex_args  # max of convex is convex
+    monotonicity: increasing  # in all arguments
+    canonicalization:
+      type: linear_cone
+      aux_vars:
+        - t: "same shape as result"
+      constraints:
+        - "t >= arg_i for all i"
+      returns: t
+
+  sumSquares:
+    description: "Sum of squares: ||x||_2^2 = sum(x_i^2)"
+    arity: unary
+    curvature: convex
+    sign: nonnegative
+    shape: scalar
+    dcp_requires: affine_arg
+    monotonicity: none
+    canonicalization:
+      type: quadratic
+      notes: "Can be in QP objective directly, or converted to RSOC"
+
+  quadForm:
+    description: "Quadratic form: x^T P x"
+    arity: binary
+    parameters:
+      - x: "vector expression"
+      - P: "constant matrix"
+    curvature:
+      rule: conditional
+      cases:
+        - if: "P is PSD"
+          then: convex
+        - if: "P is NSD"
+          then: concave
+        - else: unknown
+    sign:
+      rule: conditional
+      cases:
+        - if: "P is PSD"
+          then: nonnegative
+        - if: "P is NSD"
+          then: nonpositive
+        - else: unknown
+    shape: scalar
+    dcp_requires: affine_x
+    canonicalization:
+      type: quadratic
+      notes: "In objective: direct QP. In constraint: RSOC reformulation"
+
+  quadOverLin:
+    description: "Quadratic over linear: ||x||_2^2 / y"
+    arity: binary
+    parameters:
+      - x: "vector expression"
+      - y: "scalar expression, must be positive"
+    curvature: convex
+    sign: nonnegative
+    shape: scalar
+    dcp_requires:
+      - affine_x
+      - concave_positive_y
+    canonicalization:
+      type: rsoc
+      aux_vars:
+        - t: "scalar"
+      constraints:
+        - kind: rsoc  # Rotated SOC: 2*t*y >= ||x||^2
+          args: [t, y, x]
+      returns: t
+
+  exp:
+    description: "Exponential: e^x (element-wise)"
+    arity: unary
+    curvature: convex
+    sign: nonnegative  # exp(x) > 0 always
+    shape: same_as_arg
+    dcp_requires: affine_arg  # Can also accept convex for composition
+    monotonicity: increasing
+    canonicalization:
+      type: exp_cone
+      aux_vars:
+        - t: "same shape as arg, nonnegative"
+      constraints:
+        - kind: exp_cone
+          args: [arg, ones, t]  # t >= exp(arg)
+      returns: t
+
+# =============================================================================
+# CONCAVE ATOMS
+# =============================================================================
+
+concave_atoms:
+  minimum:
+    description: "Element-wise minimum of expressions"
+    arity: variadic
+    curvature: concave
+    sign: from_args  # nonpos if all args nonpos
+    shape: broadcast(args)
+    dcp_requires: all_concave_args
+    monotonicity: increasing
+    canonicalization:
+      type: linear_cone
+      aux_vars:
+        - t: "same shape as result"
+      constraints:
+        - "t <= arg_i for all i"
+      returns: t
+
+  log:
+    description: "Natural logarithm: log(x) (element-wise)"
+    arity: unary
+    domain: positive
+    curvature: concave
+    sign: unknown  # log(x) can be positive or negative
+    shape: same_as_arg
+    dcp_requires: concave_positive_arg
+    monotonicity: increasing
+    canonicalization:
+      type: exp_cone
+      aux_vars:
+        - t: "same shape as arg"
+      constraints:
+        - kind: exp_cone
+          args: [t, ones, arg]  # arg >= exp(t), i.e., t <= log(arg)
+      returns: t
+
+  sqrt:
+    description: "Square root: sqrt(x) (element-wise)"
+    arity: unary
+    domain: nonnegative
+    curvature: concave
+    sign: nonnegative
+    shape: same_as_arg
+    dcp_requires: concave_nonneg_arg
+    monotonicity: increasing
+    canonicalization:
+      type: power_cone
+      notes: "sqrt(x) = x^0.5, use power cone with alpha=0.5"
+
+  entropy:
+    description: "Entropy: -x * log(x) (element-wise)"
+    arity: unary
+    domain: positive
+    curvature: concave
+    sign: unknown  # Can be positive or negative
+    shape: same_as_arg
+    dcp_requires: affine_positive_arg
+    canonicalization:
+      type: exp_cone
+      notes: "Uses exponential cone representation"
+
+  power:
+    description: "Power function: x^p (element-wise)"
+    arity: unary
+    parameters:
+      - p: "power exponent (constant)"
+    domain: nonnegative  # for most p values
+    curvature:
+      rule: conditional
+      cases:
+        - if: "p == 0"
+          then: constant
+        - if: "p == 1"
+          then: affine
+        - if: "p >= 1 or p < 0"
+          then: convex
+        - if: "0 < p < 1"
+          then: concave
+    sign:
+      rule: conditional
+      cases:
+        - if: "p >= 0 and arg is nonneg"
+          then: nonnegative
+        - else: unknown
+    shape: same_as_arg
+    monotonicity:
+      rule: conditional
+      cases:
+        - if: "p > 0"
+          then: increasing
+        - if: "p < 0"
+          then: decreasing
+        - if: "p == 0"
+          then: none
+    canonicalization:
+      type: power_cone
+      notes: "Uses 3D power cone: z^(1/p) * y^(1-1/p) >= |x|"
+
+# =============================================================================
+# SIGN DEFINITIONS
+# =============================================================================
+
+signs:
+  nonnegative:
+    description: "x >= 0 for all elements"
+    negation: nonpositive
+
+  nonpositive:
+    description: "x <= 0 for all elements"
+    negation: nonnegative
+
+  zero:
+    description: "x == 0 for all elements"
+    negation: zero
+
+  unknown:
+    description: "Sign cannot be determined"
+    negation: unknown
+
+# =============================================================================
+# CURVATURE DEFINITIONS
+# =============================================================================
+
+curvatures:
+  constant:
+    description: "Fixed value, no dependence on variables"
+    is_convex: true
+    is_concave: true
+    is_affine: true
+    negation: constant
+
+  affine:
+    description: "Linear function of variables"
+    is_convex: true
+    is_concave: true
+    is_affine: true
+    negation: affine
+
+  convex:
+    description: "Convex function (bowl-shaped upward)"
+    is_convex: true
+    is_concave: false
+    is_affine: false
+    negation: concave
+
+  concave:
+    description: "Concave function (bowl-shaped downward)"
+    is_convex: false
+    is_concave: true
+    is_affine: false
+    negation: convex
+
+  unknown:
+    description: "Curvature cannot be determined (not DCP-compliant)"
+    is_convex: false
+    is_concave: false
+    is_affine: false
+    negation: unknown
+
+# =============================================================================
+# MONOTONICITY DEFINITIONS
+# =============================================================================
+
+monotonicities:
+  increasing:
+    description: "x <= y implies f(x) <= f(y)"
+
+  decreasing:
+    description: "x <= y implies f(x) >= f(y)"
+
+  none:
+    description: "No monotonicity property"

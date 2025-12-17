@@ -1,0 +1,42 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "chebyshev_center",
+
+  "variables": {
+    "x": { "shape": [2] },
+    "r": { "shape": [], "nonneg": true }
+  },
+
+  "parameters": {
+    "A": {
+      "value": [
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+        [0, -1],
+        [1, 1]
+      ]
+    },
+    "b": { "value": [2, 2, 2, 2, 3] }
+  },
+
+  "objective": {
+    "sense": "maximize",
+    "expression": "r"
+  },
+
+  "constraints": [
+    {
+      "expression": "A @ x + r * norm2(A[i, :]) <= b",
+      "name": "inscribed_ball"
+    }
+  ],
+
+  "metadata": {
+    "description": "Find the center of the largest inscribed ball in a polyhedron",
+    "problem_class": "SOCP",
+    "tags": ["geometry", "chebyshev"],
+    "notes": "Each constraint ensures the ball stays inside one halfspace"
+  }
+}

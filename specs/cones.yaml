@@ -1,0 +1,271 @@
+# CVX-Core Cone Specification
+# Defines the standard cones used in conic optimization.
+
+version: "1.0"
+
+# =============================================================================
+# CONE TYPES
+# =============================================================================
+
+cones:
+  zero:
+    name: "Zero Cone"
+    description: "Equality constraints: Ax + b = 0"
+    dimension: n
+    definition: "{ x in R^n : x = 0 }"
+    solver_representation:
+      clarabel: "ZeroConeT(n)"
+      scs: "f = n"
+      ecos: "l = 0"
+    canonicalization:
+      from: "expr == 0"
+      to: "A @ vars + b in ZeroCone"
+
+  nonneg:
+    name: "Nonnegative Orthant"
+    description: "Inequality constraints: Ax + b >= 0"
+    dimension: n
+    definition: "{ x in R^n : x >= 0 }"
+    solver_representation:
+      clarabel: "NonnegativeConeT(n)"
+      scs: "l = n"
+      ecos: "l = n"
+      highs: "native"
+    canonicalization:
+      from: "expr >= 0"
+      to: "A @ vars + b in NonnegCone"
+
+  soc:
+    name: "Second-Order Cone"
+    description: "||x||_2 <= t"
+    dimension: "n + 1"
+    definition: "{ (t, x) in R x R^n : ||x||_2 <= t }"
+    solver_representation:
+      clarabel: "SecondOrderConeT(n+1)"
+      scs: "q = [n+1]"
+      ecos: "q = [n+1]"
+    canonicalization:
+      from: "norm2(x) <= t"
+      to: "[t; x] in SOC"
+    atoms:
+      - norm2
+      - quad_over_lin (via RSOC)
+
+  rsoc:
+    name: "Rotated Second-Order Cone"
+    description: "||x||_2^2 <= 2 * s * t, s,t >= 0"
+    dimension: "n + 2"
+    definition: "{ (s, t, x) in R x R x R^n : ||x||_2^2 <= 2*s*t, s >= 0, t >= 0 }"
+    solver_representation:
+      clarabel: "use SOC with transformation"
+      scs: "use SOC with transformation"
+    transformation_to_soc: |
+      [s; t; x] in RSOC  <=>  [s + t; s - t; sqrt(2)*x] in SOC
+    atoms:
+      - quad_over_lin
+      - sum_squares (in constraints)
+
+  exp:
+    name: "Exponential Cone"
+    description: "y * exp(x/y) <= z, y > 0"
+    dimension: 3
+    definition: "{ (x, y, z) in R^3 : y * exp(x/y) <= z, y > 0 }"
+    solver_representation:
+      clarabel: "ExponentialConeT()"
+      scs: "ep = 1"
+      ecos: "e = 1"
+    atoms:
+      - exp: "(x, 1, t) in ExpCone  <=>  exp(x) <= t"
+      - log: "(t, 1, x) in ExpCone  <=>  t <= log(x)"
+      - entropy: "(-t, x, 1) in ExpCone  <=>  -x*log(x) >= t"
+      - kl_div: "sum over (x_i*log(x_i/y_i))"
+
+  exp_dual:
+    name: "Dual Exponential Cone"
+    description: "-u * exp(v/u) <= e * w, u < 0"
+    dimension: 3
+    definition: "{ (u, v, w) in R^3 : -u * exp(v/u) <= e*w, u < 0 }"
+    solver_representation:
+      clarabel: "ExponentialConeT() (dual)"
+      scs: "ed = 1"
+
+  pow:
+    name: "Power Cone (3D)"
+    description: "x^a * y^(1-a) >= |z|, x,y >= 0"
+    dimension: 3
+    parameters:
+      - alpha: "exponent in (0, 1)"
+    definition: "{ (x, y, z) in R^3 : x^a * y^(1-a) >= |z|, x >= 0, y >= 0 }"
+    solver_representation:
+      clarabel: "PowerConeT(a)"
+      scs: "p = [(a, 3)]"
+    atoms:
+      - power: "x^p for 0 < p < 1"
+      - sqrt: "x^0.5 (power with a=0.5)"
+      - geo_mean: "sqrt(x*y) (power with a=0.5)"
+
+  pow_nd:
+    name: "Power Cone (N-dimensional)"
+    description: "prod(x_i^a_i) >= |z|, x >= 0, sum(a) = 1"
+    dimension: "n + 1"
+    parameters:
+      - alpha: "exponent vector, sum = 1"
+    definition: "{ (x, z) : prod(x_i^a_i) >= |z|, x >= 0 }"
+    solver_representation:
+      clarabel: "GenPowerConeT(alpha, n)"
+      scs: "p = [alpha, n+1]"
+    atoms:
+      - geo_mean_nd: "prod(x_i)^(1/n)"
+
+  psd:
+    name: "Positive Semidefinite Cone"
+    description: "X >> 0 (matrix positive semidefinite)"
+    dimension: "n*(n+1)/2"
+    definition: "{ X in S^n : X >> 0 } (symmetric matrices)"
+    storage: "Lower triangle, column-major (svec format)"
+    solver_representation:
+      clarabel: "PSDTriangleConeT(n)"
+      scs: "s = [n]"
+      mosek: "native"
+    atoms:
+      - lambda_max
+      - lambda_min
+      - nuclear_norm
+      - matrix_frac
+
+# =============================================================================
+# CANONICALIZATION PATTERNS
+# =============================================================================
+
+canonicalization_patterns:
+  # Affine expressions
+  affine:
+    description: "Affine expressions map directly to linear constraints"
+    example: "A @ x + b"
+    result: "LinExpr with coefficients and constant"
+
+  # Quadratic expressions
+  quadratic:
+    objective:
+      description: "In objective, quadratic goes to P matrix"
+      example: "sum_squares(x) or quad_form(x, P)"
+      result: "QuadExpr for QP solvers"
+    constraint:
+      description: "In constraints, use RSOC"
+      example: "sum_squares(x) <= t"
+      result: "[t + 1; t - 1; 2*x] in SOC"
+
+  # Norms
+  norm1:
+    description: "L1 norm uses auxiliary variables"
+    steps:
+      - "Introduce t with same shape as x"
+      - "Add constraint: t >= x"
+      - "Add constraint: t >= -x"
+      - "Return: sum(t)"
+
+  norm2:
+    description: "L2 norm maps to SOC"
+    steps:
+      - "Introduce scalar t >= 0"
+      - "Add SOC constraint: [t; x] in SOC"
+      - "Return: t"
+
+  normInf:
+    description: "Infinity norm uses auxiliary variable"
+    steps:
+      - "Introduce scalar t"
+      - "Add constraint: t * ones >= x"
+      - "Add constraint: t * ones >= -x"
+      - "Return: t"
+
+  # Exponential/logarithmic
+  exp_atom:
+    description: "Exponential using exp cone"
+    steps:
+      - "Introduce t >= 0"
+      - "Add exp cone: (x, 1, t)"
+      - "Return: t"
+
+  log_atom:
+    description: "Logarithm using exp cone"
+    steps:
+      - "Introduce t"
+      - "Add exp cone: (t, 1, x)"
+      - "Return: t"
+
+  entropy_atom:
+    description: "Entropy -x*log(x) using exp cone"
+    steps:
+      - "Introduce t"
+      - "Add exp cone: (-t, x, 1)"
+      - "Return: sum(t)"
+
+  # Power functions
+  power_convex:
+    description: "x^p for p >= 1 or p < 0 (convex)"
+    steps:
+      - "Introduce t"
+      - "If p >= 1: (t, 1, x) in pow cone with alpha = 1/p"
+      - "If p < 0: (1, x, t) in pow cone with alpha = -1/p"
+      - "Return: t"
+
+  power_concave:
+    description: "x^p for 0 < p < 1 (concave)"
+    steps:
+      - "Introduce t"
+      - "(x, 1, t) in pow cone with alpha = p"
+      - "Return: t"
+
+  sqrt_atom:
+    description: "sqrt(x) = x^0.5 using power cone"
+    steps:
+      - "Introduce t >= 0"
+      - "(x, 1, t) in pow cone with alpha = 0.5"
+      - "Return: t"
+
+# =============================================================================
+# SOLVER CONE SUPPORT
+# =============================================================================
+
+solver_support:
+  clarabel:
+    cones: [zero, nonneg, soc, exp, pow, psd]
+    matrix_format: CSC
+    interface: native_rust
+
+  scs:
+    cones: [zero, nonneg, soc, exp, exp_dual, pow, psd]
+    matrix_format: CSC
+    interface: c_api
+
+  ecos:
+    cones: [zero, nonneg, soc, exp]
+    matrix_format: CSC
+    interface: c_api
+    notes: "No power cone or SDP support"
+
+  mosek:
+    cones: [zero, nonneg, soc, rsoc, exp, pow, psd]
+    matrix_format: native
+    interface: commercial_api
+    notes: "Full cone support including SDP"
+
+  gurobi:
+    cones: [zero, nonneg, soc]
+    matrix_format: native
+    interface: commercial_api
+    notes: "SOC via quadratic constraints"
+
+  highs:
+    cones: [zero, nonneg]
+    matrix_format: CSC
+    interface: native
+    notes: "LP/QP/MIP only, no conic support"
+    mip_support: true
+
+  osqp:
+    cones: [zero, nonneg]
+    matrix_format: CSC
+    interface: c_api
+    notes: "QP only, constraint bounds"

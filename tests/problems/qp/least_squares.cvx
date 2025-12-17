@@ -1,0 +1,27 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "least_squares_regression",
+
+  "variables": {
+    "x": { "shape": [10] }
+  },
+
+  "parameters": {
+    "A": { "shape": [50, 10], "data": "A.npy" },
+    "b": { "shape": [50], "data": "b.npy" }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "sum_squares(A @ x - b)"
+  },
+
+  "constraints": [],
+
+  "metadata": {
+    "description": "Unconstrained least squares regression",
+    "problem_class": "QP",
+    "notes": "Equivalent to solving normal equations: A'A x = A'b"
+  }
+}

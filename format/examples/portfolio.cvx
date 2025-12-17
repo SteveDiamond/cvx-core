@@ -1,0 +1,40 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "mean_variance_portfolio",
+
+  "variables": {
+    "w": { "shape": [10], "nonneg": true }
+  },
+
+  "parameters": {
+    "mu": {
+      "shape": [10],
+      "data": [0.12, 0.10, 0.08, 0.15, 0.09, 0.11, 0.07, 0.13, 0.06, 0.14],
+      "nonneg": true
+    },
+    "Sigma": {
+      "shape": [10, 10],
+      "data": "covariance.npy",
+      "psd": true
+    },
+    "gamma": { "value": 1.0 }
+  },
+
+  "objective": {
+    "sense": "maximize",
+    "expression": "mu @ w - gamma * quad_form(w, Sigma)"
+  },
+
+  "constraints": [
+    "sum(w) == 1",
+    "w <= 0.4"
+  ],
+
+  "metadata": {
+    "description": "Markowitz mean-variance portfolio optimization",
+    "problem_class": "QP",
+    "tags": ["finance", "portfolio", "quadratic"],
+    "reference": "Markowitz, H. (1952). Portfolio Selection. Journal of Finance."
+  }
+}

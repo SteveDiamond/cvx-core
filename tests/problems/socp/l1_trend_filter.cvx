@@ -1,0 +1,32 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "l1_trend_filtering",
+
+  "variables": {
+    "x": { "shape": [100] }
+  },
+
+  "parameters": {
+    "y": { "shape": [100], "data": "observations.npy" },
+    "lambda": { "value": 1.0 },
+    "D": {
+      "shape": [98, 100],
+      "data": "second_difference_matrix.npy"
+    }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "0.5 * sum_squares(y - x) + lambda * norm1(D @ x)"
+  },
+
+  "constraints": [],
+
+  "metadata": {
+    "description": "L1 trend filtering for piecewise linear denoising",
+    "problem_class": "SOCP",
+    "tags": ["signal-processing", "denoising", "sparse"],
+    "notes": "D is the second difference matrix for piecewise linear trends"
+  }
+}

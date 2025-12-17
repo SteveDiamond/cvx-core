@@ -1,0 +1,29 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "norm_minimization",
+
+  "variables": {
+    "x": { "shape": [5] }
+  },
+
+  "parameters": {
+    "A": { "value": [[1, 2, 0, 1, 0], [0, 1, 3, 0, 1], [1, 0, 0, 2, 1]] },
+    "b": { "value": [1, 2, 1] }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "norm2(x)"
+  },
+
+  "constraints": [
+    "A @ x == b"
+  ],
+
+  "metadata": {
+    "description": "Minimum norm solution to linear equations",
+    "problem_class": "SOCP",
+    "notes": "Finds x with minimum L2 norm satisfying Ax = b"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "soft_margin_svm",
+
+  "variables": {
+    "w": { "shape": [20] },
+    "b": { "shape": [] },
+    "xi": { "shape": [100], "nonneg": true }
+  },
+
+  "parameters": {
+    "X": { "shape": [100, 20], "data": "features.npy" },
+    "y": { "shape": [100], "data": "labels.npy" },
+    "C": { "value": 1.0 }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "0.5 * sum_squares(w) + C * sum(xi)"
+  },
+
+  "constraints": [
+    {
+      "expression": "diag(y) @ (X @ w + b) >= 1 - xi",
+      "name": "margin_constraints"
+    }
+  ],
+
+  "metadata": {
+    "description": "Soft-margin Support Vector Machine (SVM) for binary classification",
+    "problem_class": "QP",
+    "tags": ["classification", "svm", "machine-learning"],
+    "notes": "y should be +1 or -1 for binary labels"
+  }
+}

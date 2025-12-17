@@ -1,0 +1,31 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "basic_linear_program",
+
+  "variables": {
+    "x": { "shape": [2], "nonneg": true }
+  },
+
+  "parameters": {
+    "c": { "value": [-1, -2] },
+    "A": { "value": [[1, 1], [2, 1], [1, 2]] },
+    "b": { "value": [4, 5, 5] }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "c @ x"
+  },
+
+  "constraints": [
+    "A @ x <= b"
+  ],
+
+  "metadata": {
+    "description": "Basic 2D linear program",
+    "problem_class": "LP",
+    "expected_optimal": -6.0,
+    "expected_solution": [1.0, 2.0]
+  }
+}

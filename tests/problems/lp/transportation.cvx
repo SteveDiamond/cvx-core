@@ -1,0 +1,37 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "transportation_problem",
+
+  "variables": {
+    "X": { "shape": [3, 4], "nonneg": true }
+  },
+
+  "parameters": {
+    "supply": { "value": [100, 150, 200] },
+    "demand": { "value": [80, 90, 120, 160] },
+    "cost": {
+      "value": [
+        [8, 6, 10, 9],
+        [9, 12, 13, 7],
+        [14, 9, 16, 5]
+      ]
+    }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "sum(cost * X)"
+  },
+
+  "constraints": [
+    { "expression": "sum(X, 1) == supply", "name": "supply_constraints" },
+    { "expression": "sum(X, 0) == demand", "name": "demand_constraints" }
+  ],
+
+  "metadata": {
+    "description": "Classic transportation problem: minimize shipping costs",
+    "problem_class": "LP",
+    "tags": ["logistics", "network-flow"]
+  }
+}

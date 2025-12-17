@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cvx-core.org/schemas/problem.schema.json",
+  "title": "CVX Problem",
+  "description": "Schema for CVX problem file format",
+  "type": "object",
+  "required": ["format", "version", "variables", "objective"],
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "cvx",
+      "description": "File format identifier"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Format version (e.g., '1.0')"
+    },
+    "name": {
+      "type": "string",
+      "description": "Problem name"
+    },
+    "variables": {
+      "type": "object",
+      "description": "Decision variables",
+      "additionalProperties": {
+        "$ref": "#/definitions/variable"
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "description": "Constant parameters",
+      "additionalProperties": {
+        "$ref": "#/definitions/parameter"
+      }
+    },
+    "constants": {
+      "type": "object",
+      "description": "Named constants",
+      "additionalProperties": {
+        "$ref": "#/definitions/constant"
+      }
+    },
+    "objective": {
+      "$ref": "#/definitions/objective"
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/constraint"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional metadata",
+      "properties": {
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "created": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "problem_class": {
+          "type": "string",
+          "enum": ["LP", "QP", "SOCP", "SDP", "EXP_CONE", "POWER_CONE", "MIP"]
+        },
+        "expected_optimal": { "type": "number" },
+        "expected_solution": {},
+        "solution_file": { "type": "string" }
+      }
+    }
+  },
+  "definitions": {
+    "shape": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0 },
+      "description": "Array dimensions ([] for scalar, [n] for vector, [m,n] for matrix)"
+    },
+    "variable": {
+      "type": "object",
+      "required": ["shape"],
+      "properties": {
+        "shape": { "$ref": "#/definitions/shape" },
+        "nonneg": { "type": "boolean" },
+        "nonpos": { "type": "boolean" },
+        "lower": { "type": "number" },
+        "upper": { "type": "number" },
+        "integer": { "type": "boolean" },
+        "binary": { "type": "boolean" },
+        "symmetric": { "type": "boolean" },
+        "psd": { "type": "boolean" },
+        "nsd": { "type": "boolean" }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "required": ["shape"],
+      "properties": {
+        "shape": { "$ref": "#/definitions/shape" },
+        "value": {},
+        "data": {},
+        "nonneg": { "type": "boolean" },
+        "psd": { "type": "boolean" },
+        "nsd": { "type": "boolean" }
+      }
+    },
+    "constant": {
+      "type": "object",
+      "properties": {
+        "shape": { "$ref": "#/definitions/shape" },
+        "value": {},
+        "data": {},
+        "identity": { "type": "boolean" }
+      }
+    },
+    "objective": {
+      "type": "object",
+      "required": ["sense", "expression"],
+      "properties": {
+        "sense": {
+          "type": "string",
+          "enum": ["minimize", "maximize"]
+        },
+        "expression": {
+          "type": "string",
+          "description": "Objective expression in CVX DSL"
+        }
+      }
+    },
+    "constraint": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Constraint expression with comparison operator"
+        },
+        {
+          "type": "object",
+          "required": ["expression"],
+          "properties": {
+            "expression": { "type": "string" },
+            "name": { "type": "string" }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "poisson_regression",
+
+  "variables": {
+    "beta": { "shape": [10] }
+  },
+
+  "parameters": {
+    "X": { "shape": [100, 10], "data": "features.npy" },
+    "y": { "shape": [100], "data": "counts.npy", "nonneg": true }
+  },
+
+  "objective": {
+    "sense": "minimize",
+    "expression": "sum(exp(X @ beta)) - y @ (X @ beta)"
+  },
+
+  "constraints": [],
+
+  "metadata": {
+    "description": "Poisson regression for count data (negative log-likelihood)",
+    "problem_class": "EXP_CONE",
+    "tags": ["regression", "glm", "count-data"]
+  }
+}
