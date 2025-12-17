@@ -1,0 +1,19 @@
+{
+  "name": "cvx-validator-typescript",
+  "version": "0.1.0",
+  "description": "Validator for cvxjs against CVX-Core specifications",
+  "type": "module",
+  "scripts": {
+    "validate": "tsx validate_cvxjs.ts"
+  },
+  "dependencies": {
+    "cvxjs": "file:../../../cvxjs",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,11 @@
+[package]
+name = "cvx-validator"
+version = "0.1.0"
+edition = "2021"
+description = "Validator for cvxrust against CVX-Core specifications"
+
+[dependencies]
+cvxrust = { path = "../../../cvxrust" }
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+nalgebra = "0.33"

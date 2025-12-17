@@ -1,101 +1,88 @@
 # CVX-Core
 
-**Cross-language specifications, tools, and shared components for building convex optimization libraries.**
+**Cross-language specifications and validation for convex optimization libraries.**
 
-CVX-Core provides a unified foundation for the CVX* family of convex optimization libraries (cvxpy, cvxjs, cvxrust, etc.), including:
+CVX-Core provides a unified foundation for the CVX* family of convex optimization libraries (cvxpy, cvxjs, cvxrust), including:
 
-- **Shared specifications** for atoms, DCP rules, and canonicalization
+- **Canonical specifications** for atoms, DCP rules, and canonicalization
+- **Cross-language validators** to ensure consistency across implementations
 - **CVX file format** for portable problem definitions
-- **Code generators** for multiple target languages
-- **Shared WASM solver builds** (Clarabel, HiGHS)
-- **Cross-language test suite** with standard problems
+- **Standard test suite** with reference optimization problems
+
+## Why Validation Over Code Generation?
+
+Each CVX library (cvxpy, cvxjs, cvxrust) has its own idiomatic architecture:
+
+| Library | Architecture | Atom Definition |
+|---------|-------------|-----------------|
+| **cvxpy** | Class-based | Each atom is a class with methods like `is_convex()` |
+| **cvxjs** | Centralized | Atoms are functions, curvature in one switch statement |
+| **cvxrust** | Enum-based | Atoms are enum variants, curvature via match |
+
+Code generation would force all libraries into the same pattern. Instead, CVX-Core:
+
+1. **Defines the spec** - `atoms.yaml` is the source of truth for atom properties
+2. **Validates implementations** - Each library is tested against the spec
+3. **Catches inconsistencies** - CI ensures all libraries agree on curvature, sign, DCP rules
 
 ## Quick Start
 
-### Using the CVX File Format
+### Running Validators
 
-```json
-{
-  "format": "cvx",
-  "version": "1.0",
-  "name": "portfolio_optimization",
+```bash
+# Validate all languages
+python validators/run_all.py
 
-  "variables": {
-    "w": { "shape": [10], "nonneg": true }
-  },
+# Validate specific languages
+python validators/run_all.py --languages python typescript
 
-  "parameters": {
-    "mu": { "shape": [10], "data": "returns.npy" },
-    "Sigma": { "shape": [10, 10], "data": "covariance.npy", "psd": true },
-    "gamma": { "value": 1.0 }
-  },
+# Get detailed output
+python validators/run_all.py --detailed
 
-  "objective": {
-    "sense": "maximize",
-    "expression": "mu @ w - gamma * quad_form(w, Sigma)"
-  },
-
-  "constraints": [
-    "sum(w) == 1",
-    "w <= 0.3"
-  ]
-}
+# JSON output for CI
+python validators/run_all.py --json
 ```
 
-### Loading in Different Languages
+### Example Output
 
-```python
-# Python (cvxpy)
-import cvxpy as cp
-problem = cp.load("portfolio.cvx")
-problem.solve()
-print(problem.value)
 ```
+======================================================================
+CVX-CORE CROSS-LANGUAGE VALIDATION SUMMARY
+======================================================================
 
-```typescript
-// TypeScript (cvxjs)
-import { load } from 'cvxjs';
-const problem = await load('portfolio.cvx');
-const solution = await problem.solve();
-console.log(solution.value);
-```
+Language                  Status     Passed     Total
+-------------------------------------------------------
+python/cvxpy              PASS       18         18
+typescript/cvxjs          PASS       17         17
+rust/cvxrust              PASS       15         15
+-------------------------------------------------------
 
-```rust
-// Rust (cvxrust)
-use cvxrust::Problem;
-let problem = Problem::load("portfolio.cvx")?;
-let solution = problem.solve()?;
-println!("{}", solution.value);
+✓ All validators passed!
 ```
 
 ## Repository Structure
 
 ```
 cvx-core/
-├── specs/                    # Shared specifications
+├── specs/                    # Canonical specifications
 │   ├── atoms.yaml           # Atom definitions with DCP properties
 │   ├── curvature.yaml       # Curvature composition rules
 │   ├── cones.yaml           # Cone types and canonicalization
-│   └── schema/              # JSON schemas for validation
+│   └── problem.schema.json  # JSON schema for CVX files
+│
+├── validators/               # Cross-language validators
+│   ├── run_all.py           # Unified test runner
+│   ├── common/              # Shared spec loader
+│   ├── python/              # cvxpy validator
+│   ├── typescript/          # cvxjs validator
+│   └── rust/                # cvxrust validator
 │
 ├── format/                   # CVX file format
 │   ├── spec.md              # Format specification
-│   ├── typescript/          # TypeScript parser
-│   ├── rust/                # Rust parser
-│   ├── python/              # Python parser
 │   └── examples/            # Example .cvx files
 │
-├── generators/               # Code generators
-│   ├── typescript/          # Generate TS code from specs
-│   ├── rust/                # Generate Rust code from specs
-│   └── python/              # Generate Python code from specs
-│
-├── wasm/                    # Shared WASM solver builds
-│   ├── clarabel/            # Clarabel WASM package
-│   └── highs/               # HiGHS WASM package
-│
-├── tests/                   # Cross-language test suite
-│   └── problems/            # Standard test problems (.cvx)
+├── tests/                   # Standard test problems
+│   └── problems/            # Test problems by category
 │
 └── docs/                    # Documentation
 ```
@@ -104,7 +91,7 @@ cvx-core/
 
 ### atoms.yaml
 
-Defines all atoms (operations) with their DCP properties:
+The canonical source of truth for atom properties:
 
 ```yaml
 convex_atoms:
@@ -113,7 +100,8 @@ convex_atoms:
     curvature: convex
     sign: nonnegative
     shape: scalar
-    dcp_requires: affine_arg
+    dcp_requires: affine_arg    # Argument must be affine for DCP
+    monotonicity: none          # Not monotonic
     canonicalization:
       type: soc
       aux_vars:
@@ -125,9 +113,20 @@ convex_atoms:
       returns: t
 ```
 
+### What Gets Validated
+
+For each atom, validators check:
+
+| Property | Description | Example |
+|----------|-------------|---------|
+| **Curvature** | Is the atom convex/concave/affine? | `norm2` → convex |
+| **Sign** | Is the result nonnegative/nonpositive? | `norm2` → nonnegative |
+| **DCP Requirements** | What curvature must arguments have? | `norm2` requires affine |
+| **Composition** | Does convex(convex) work correctly? | `exp(sum_squares(x))` → convex |
+
 ### curvature.yaml
 
-Defines curvature composition rules:
+Defines how curvatures combine:
 
 ```yaml
 addition:
@@ -143,6 +142,33 @@ composition:
       concave: unknown
 ```
 
+## Writing a Validator
+
+Each validator follows the same pattern:
+
+```python
+# 1. Load the spec
+specs = load_specs()
+
+# 2. For each atom in the spec
+for atom_name, spec in specs.items():
+    # 3. Create a test expression
+    x = variable(5)
+    expr = atom_func(x)
+
+    # 4. Check curvature matches spec
+    assert curvature(expr) == spec.curvature
+
+    # 5. Check sign matches spec
+    assert sign(expr) == spec.sign
+
+    # 6. Check DCP requirements
+    if spec.requires_affine_arg:
+        convex_arg = sum_squares(x)  # Not affine
+        bad_expr = atom_func(convex_arg)
+        assert curvature(bad_expr) == UNKNOWN
+```
+
 ## Supported Problem Classes
 
 | Class | Description | Example Atoms |
@@ -154,65 +180,66 @@ composition:
 | **POW** | Power Cone | power, sqrt |
 | **SDP** | Semidefinite | lambda_max, nuclear_norm |
 
-## Expression DSL
+## CVX File Format
 
-The CVX format uses a simple infix expression DSL:
+Portable problem definitions that work across all languages:
 
-```
-# Operators
-+, -, *, /, @     # Arithmetic and matrix multiply
-==, <=, >=       # Constraints
+```json
+{
+  "format": "cvx",
+  "version": "1.0",
+  "name": "portfolio_optimization",
 
-# Atoms
-norm1(x), norm2(x), normInf(x)
-sum(x), sum_squares(x)
-quad_form(x, P), quad_over_lin(x, y)
-abs(x), pos(x), neg(x)
-maximum(a, b), minimum(a, b)
-exp(x), log(x), entropy(x)
-sqrt(x), power(x, p)
-trace(X), diag(x), transpose(X)
-vstack(a, b), hstack(a, b)
+  "variables": {
+    "w": { "shape": [10], "nonneg": true }
+  },
 
-# Indexing
-x[0], x[0:10], x[:]
-```
+  "parameters": {
+    "mu": { "shape": [10], "data": "returns.npy" },
+    "Sigma": { "shape": [10, 10], "psd": true }
+  },
 
-## Test Suite
+  "objective": {
+    "sense": "maximize",
+    "expression": "mu @ w - quad_form(w, Sigma)"
+  },
 
-The `tests/problems/` directory contains standard optimization problems:
-
-| Category | Problems |
-|----------|----------|
-| `lp/` | Basic LP, transportation, diet |
-| `qp/` | Simple QP, portfolio, least squares |
-| `socp/` | Norm minimization, robust regression, LASSO |
-| `exp_cone/` | Maximum entropy, log-sum-exp |
-
-Run the cross-language test suite:
-
-```bash
-python tests/runner.py --languages python,typescript,rust
+  "constraints": ["sum(w) == 1", "w <= 0.3"]
+}
 ```
 
-## Code Generation
+## CI Integration
 
-Generate language-specific code from specifications:
+Add to your GitHub Actions workflow:
 
-```bash
-# Generate TypeScript expression types
-python generators/typescript/generate.py --output ../cvxjs/src/generated/
+```yaml
+name: CVX Validation
+on: [push, pull_request]
 
-# Generate Rust expression types
-python generators/rust/generate.py --output ../cvxrust/src/generated/
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml cvxpy
+
+      - name: Run validators
+        run: python validators/run_all.py --json
 ```
 
 ## Contributing
 
-1. Add new atoms to `specs/atoms.yaml`
-2. Update curvature rules in `specs/curvature.yaml`
-3. Add test problems to `tests/problems/`
-4. Run the cross-language test suite
+1. **Add new atoms**: Update `specs/atoms.yaml` with the atom's properties
+2. **Update validators**: Add the atom to each language's validator
+3. **Run validation**: `python validators/run_all.py`
+4. **Add test problems**: Create `.cvx` files in `tests/problems/`
 
 ## Related Projects
 
@@ -222,4 +249,4 @@ python generators/rust/generate.py --output ../cvxrust/src/generated/
 
 ## License
 
-MIT License
+Apache License 2.0
